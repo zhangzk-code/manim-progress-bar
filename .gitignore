@@ -33,6 +33,8 @@ wheels/
 *.swo
 *~
 publish.*
+github_release.*
+update_version.*
 
 # 环境变量
 .env

@@ -1,4 +1,4 @@
-﻿"""
+"""
 Manim Progress Bar Plugin
 
 A customizable progress bar component for Manim animations.
