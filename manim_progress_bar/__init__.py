@@ -6,5 +6,5 @@ A customizable progress bar component for Manim animations.
 
 from .progress_bar import ProgressBar
 
-__version__ = "0.1.1"
+__version__ = "0.2.0"
 __all__ = ["ProgressBar"]

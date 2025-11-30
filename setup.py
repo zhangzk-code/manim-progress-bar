@@ -5,7 +5,7 @@ with open("README.md", "r", encoding="utf-8") as fh:
 
 setup(
     name="manim-progress-bar",
-    version="0.1.1",
+    version="0.2.0",
     author="Zhiku Zhang",
     author_email="zhangzk1205@163.com",
     description="A customizable progress bar component for Manim animations",

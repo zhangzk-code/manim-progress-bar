@@ -26,6 +26,31 @@ Usage:
 """
 
 from manim import *
+import numpy as np
+import logging
+
+# 配置日志记录器
+logger = logging.getLogger(__name__)
+
+# 如果 logger 还没有处理器，则添加一个控制台处理器
+if not logger.handlers:
+    # 创建控制台处理器
+    console_handler = logging.StreamHandler()
+    console_handler.setLevel(logging.DEBUG)
+    
+    # 创建格式器
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    console_handler.setFormatter(formatter)
+    
+    # 添加处理器到 logger
+    logger.addHandler(console_handler)
+    logger.setLevel(logging.DEBUG)
+    
+    # 防止日志传播到根 logger（避免重复输出）
+    logger.propagate = False
 
 
 class ProgressBar(VGroup):
@@ -38,6 +63,7 @@ class ProgressBar(VGroup):
     - Smooth animations
     - Optional percentage display
     - Precise filling to 100%
+    - Customizable angle (supports any angle from 0 to 360 degrees)
     
     Parameters
     ----------
@@ -67,6 +93,14 @@ class ProgressBar(VGroup):
         Font family for percentage text (default: "Arial")
     duration : float, optional
         Total duration in seconds for auto-progression (default: None)
+    angle : float, optional
+        Angle of the progress bar in degrees (default: 0).
+        The progress bar rotates clockwise from the positive x-axis.
+        - 0 degrees: Horizontal, growing from left to right
+        - 90 degrees: Vertical, growing from bottom to top
+        - 180 degrees: Horizontal, growing from right to left
+        - 270 degrees: Vertical, growing from top to bottom
+        - Any other angle: Diagonal progress bar
     
     Examples
     --------
@@ -78,7 +112,49 @@ class ProgressBar(VGroup):
     Auto-progression:
         progress = ProgressBar(duration=10.0)
         self.play(progress.start())  # Progresses to 100% in 10 seconds
+    
+    Different angles:
+        # Horizontal (0 degrees, default)
+        progress1 = ProgressBar(angle=0)
+        
+        # Vertical (90 degrees)
+        progress2 = ProgressBar(angle=90)
+        
+        # Diagonal (45 degrees)
+        progress3 = ProgressBar(angle=45)
+        
+        # Any angle
+        progress4 = ProgressBar(angle=135)
     """
+    
+    # 常量
+    FILL_HEIGHT_RATIO = 0.95  # 填充条高度相对于原始高度的比例
+    BASE_MIN_SIZE = 0.1  # 基础最小尺寸，避免RoundedRectangle在尺寸为0时的错误
+    
+    @staticmethod
+    def _get_direction_vector(angle_deg, angle_rad):
+        """
+        计算精确的方向向量，对于特殊角度使用精确值避免浮点数误差
+        :param angle_deg: 角度（度）
+        :param angle_rad: 角度（弧度）
+        :return: 单位方向向量 [x, y, 0]
+        """
+        angle_deg = angle_deg % 360
+        if abs(angle_deg - 0) < 1e-6 or abs(angle_deg - 360) < 1e-6:
+            return np.array([1.0, 0.0, 0.0])
+        elif abs(angle_deg - 90) < 1e-6:
+            return np.array([0.0, 1.0, 0.0])
+        elif abs(angle_deg - 180) < 1e-6:
+            return np.array([-1.0, 0.0, 0.0])
+        elif abs(angle_deg - 270) < 1e-6:
+            return np.array([0.0, -1.0, 0.0])
+        else:
+            direction_vec = np.array([np.cos(angle_rad), np.sin(angle_rad), 0.0])
+            # 归一化方向向量，确保是单位向量
+            norm = np.linalg.norm(direction_vec[:2])
+            if norm > 1e-10:
+                return np.array([direction_vec[0] / norm, direction_vec[1] / norm, 0.0])
+            return direction_vec
     
     def __init__(
         self,
@@ -93,14 +169,16 @@ class ProgressBar(VGroup):
         show_percentage=True,         # 是否显示百分比
         percentage_font_size=28,     # 百分比字体大小（增大默认值）
         percentage_color=WHITE,      # 百分比文字颜色
-        percentage_font="Arial",     # 百分比字体
+        percentage_font="Sans",     # 百分比字体
         duration=None,               # 总时长（秒），如果设置则进度条会自动按此时间推进
+        angle=0,                     # 进度条角度（度），0度为水平向右，按顺时针旋转
         **kwargs
     ):
         super().__init__(**kwargs)
         
-        self.width = width
-        self.height = height
+        # 存储原始宽度和高度（使用不同的属性名，避免与 VGroup 的属性冲突）
+        self.original_width = width
+        self.original_height = height
         self.fill_color = fill_color
         self.background_color = background_color
         self.border_color = border_color
@@ -112,7 +190,16 @@ class ProgressBar(VGroup):
         self.percentage_font = percentage_font
         self.duration = duration  # 存储用户设置的时长
         
-        # 创建背景
+        # 存储角度（转换为弧度）
+        self.angle = angle
+        self.angle_rad = np.radians(angle)
+        
+        # 计算动态最小尺寸：对于圆角矩形，宽度至少需要是2倍的圆角半径，否则会被挤压变形
+        # 填充条使用 corner_radius * 0.9，所以最小宽度应该是 2 * (corner_radius * 0.9)
+        fill_corner_radius = corner_radius * 0.9
+        self.MIN_SIZE = max(self.BASE_MIN_SIZE, 2 * fill_corner_radius)
+        
+        # 创建背景（始终使用 width 和 height，不交换）
         self.background = RoundedRectangle(
             width=width,
             height=height,
@@ -122,40 +209,33 @@ class ProgressBar(VGroup):
             stroke_color=border_color,
             stroke_width=border_width
         )
+        
+        # 计算沿角度方向的单位向量（使用精确值避免浮点数误差）
+        direction_vec = self._get_direction_vector(self.angle, self.angle_rad)
+        
+        self.bg_half_length = width / 2
+        
+        # 旋转背景到指定角度
+        self.background.rotate(self.angle_rad)
         self.add(self.background)
         
-        # 创建填充条（初始宽度为很小的值，避免宽度为0时的错误）
-        min_width = 0.1  # 最小宽度，避免RoundedRectangle在宽度为0时的错误
-        # 填充条高度略小于背景，留出一点边距
-        fill_height = height * 0.95
-        self.fill_bar = RoundedRectangle(
-            width=min_width,
-            height=fill_height,
-            corner_radius=corner_radius * 0.9,
-            fill_color=fill_color,
-            fill_opacity=1.0,
-            stroke_opacity=0
-        )
-        # 精确左对齐：左边缘对齐到背景左边缘
-        left_edge = self.background.get_left()
-        self.fill_bar.move_to([
-            left_edge[0] + min_width / 2,
-            self.background.get_center()[1],
-            0
-        ])
+        # 创建填充条（初始宽度很小）
+        fill_height = self.original_height * self.FILL_HEIGHT_RATIO
+        self.fill_bar = self._create_fill_bar(self.MIN_SIZE, fill_height)
+        
+        # 计算起点位置（沿角度方向的负方向，从中心点开始）
+        bg_center = self.background.get_center()
+        start_offset = -self.bg_half_length + self.MIN_SIZE / 2
+        start_pos = bg_center + direction_vec * start_offset
+        
+        # 旋转填充条到对应角度并设置位置
+        self.fill_bar.rotate(self.angle_rad)
+        self.fill_bar.move_to(start_pos)
         self.add(self.fill_bar)
         
-        # 创建百分比文本（使用更美观的字体）
+        # 创建百分比文本
         if show_percentage:
-            self.percentage_text = Text(
-                "0%",
-                font=percentage_font,
-                font_size=percentage_font_size,
-                color=percentage_color,
-                weight=BOLD,  # 加粗
-                stroke_width=0.3,  # 添加描边，更清晰
-                stroke_color=percentage_color
-            )
+            self.percentage_text = self._create_percentage_text(0)
             self.percentage_text.move_to(self.background.get_center())
             self.add(self.percentage_text)
         
@@ -165,6 +245,83 @@ class ProgressBar(VGroup):
         # 当前进度（0-1）
         self.current_progress = 0.0
     
+    def _create_fill_bar(self, width, height):
+        """创建填充条"""
+        fill_bar = RoundedRectangle(
+            width=width,
+            height=height,
+            corner_radius=self.corner_radius * 0.9,  # 填充条圆角半径略小于背景
+            fill_color=self.fill_color,
+            fill_opacity=1.0,
+            stroke_width=0,  # 明确设置描边宽度为0
+            stroke_opacity=0
+        )
+        # 明确设置所有颜色相关属性，确保颜色饱满，无描边
+        fill_bar.set_fill(color=self.fill_color, opacity=1.0)
+        fill_bar.set_stroke(width=0, opacity=0)
+        fill_bar.set_opacity(1.0)
+        return fill_bar
+    
+    def _create_percentage_text(self, percentage):
+        """创建百分比文本"""
+        return Text(
+            f"{percentage}%",
+            font=self.percentage_font,
+            font_size=self.percentage_font_size,
+            color=self.percentage_color,
+            weight=BOLD,
+            stroke_width=0.3,
+            stroke_color=self.percentage_color
+        )
+    
+    def _update_fill_bar(self, width, height, center):
+        """更新填充条的尺寸和位置"""
+        # 创建新的填充条
+        new_fill_bar = self._create_fill_bar(width, height)
+        new_fill_bar.rotate(self.angle_rad)
+        new_fill_bar.move_to(center)
+        # 在替换之前，强制设置颜色和不透明度，确保颜色饱满，无描边
+        new_fill_bar.set_fill(color=self.fill_color, opacity=1.0)
+        new_fill_bar.set_stroke(width=0, opacity=0)
+        new_fill_bar.set_opacity(1.0)
+        # 使用 become 直接替换，避免 remove/add 可能导致的颜色混合问题
+        self.fill_bar.become(new_fill_bar)
+        # 再次强制设置颜色和描边，确保 become 后颜色仍然正确，无白色框
+        self.fill_bar.set_fill(color=self.fill_color, opacity=1.0)
+        self.fill_bar.set_stroke(width=0, opacity=0)
+        self.fill_bar.set_opacity(1.0)
+        
+    
+    def _calculate_fill_bar_properties(self, progress):
+        """
+        根据进度和角度计算填充条的属性（宽度/高度和位置）
+        :param progress: 进度值（0-1）
+        :return: (width, height, center_x, center_y, center_z) 元组
+        """
+        # 计算沿角度方向的单位向量
+        direction_vec = self._get_direction_vector(self.angle, self.angle_rad)
+        
+        # 背景在角度方向上的总长度
+        bg_total_length = 2 * self.bg_half_length
+        
+        # 填充条的高度
+        fill_height = self.original_height * self.FILL_HEIGHT_RATIO
+        
+        # 计算填充条在角度方向上的长度
+        if progress <= 0:
+            fill_length = self.MIN_SIZE
+        elif progress >= 1.0:
+            fill_length = bg_total_length
+        else:
+            fill_length = max(self.MIN_SIZE, bg_total_length * progress)
+        
+        # 计算填充条的中心位置
+        bg_center = self.background.get_center()
+        start_offset = -self.bg_half_length + fill_length / 2
+        fill_center = bg_center + direction_vec * start_offset
+        
+        return (fill_length, fill_height, fill_center[0], fill_center[1], fill_center[2])
+    
     def set_progress(self, progress, run_time=1.0):
         """
         设置进度条进度
@@ -173,59 +330,41 @@ class ProgressBar(VGroup):
         :return: 动画对象
         """
         progress = max(0.0, min(1.0, progress))  # 限制在0-1之间
+        
+        # 计算起始填充条属性（使用当前进度）
+        start_width, start_height, start_x, start_y, start_z = self._calculate_fill_bar_properties(self.current_progress)
+        
+        # 计算目标填充条属性
+        target_width, target_height, target_x, target_y, target_z = self._calculate_fill_bar_properties(progress)
+        
+        # 更新当前进度
         self.current_progress = progress
-        
-        # 计算精确的填充宽度（使用背景的实际宽度，确保100%时完全铺满）
-        min_width = 0.1
-        # 使用背景的实际宽度（右边缘 - 左边缘），确保精确匹配
-        bg_left = self.background.get_left()[0]
-        bg_right = self.background.get_right()[0]
-        usable_width = bg_right - bg_left  # 背景的实际宽度
-        
-        if progress <= 0:
-            new_width = min_width
-        elif progress >= 1.0:
-            # 100%时铺满整个背景宽度
-            new_width = usable_width
-        else:
-            # 精确计算：progress * 背景实际宽度
-            new_width = max(min_width, usable_width * progress)
         
         # 创建动画列表
         anims = []
         
-        # 更新填充条宽度（从左到右逐渐填充）
-        # 使用重新创建填充条的方法，确保填充颜色完整
-        # 创建一个更新函数来重新创建填充条
-        start_width = self.fill_bar.width
-        fill_height = self.height * 0.95
-        
         def update_fill_bar(mob, alpha):
             """更新填充条：重新创建以确保填充颜色完整"""
-            # 计算当前宽度（线性插值）
-            current_width = start_width + (new_width - start_width) * alpha
-            # 确保最小宽度
-            current_width = max(0.1, current_width)
+            # 计算当前属性（线性插值）
+            current_width = start_width + (target_width - start_width) * alpha
+            current_height = start_height + (target_height - start_height) * alpha
+            current_x = start_x + (target_x - start_x) * alpha
+            current_y = start_y + (target_y - start_y) * alpha
+            current_z = start_z + (target_z - start_z) * alpha
             
-            # 重新创建填充条，确保填充颜色完整
-            new_fill_bar = RoundedRectangle(
-                width=current_width,
-                height=fill_height,
-                corner_radius=self.corner_radius * 0.9,
-                fill_color=self.fill_color,
-                fill_opacity=1.0,
-                stroke_opacity=0
-            )
+            # 确保最小尺寸
+            current_width = max(self.MIN_SIZE, current_width)
+            current_height = max(self.MIN_SIZE, current_height)
             
-            # 计算位置（左边缘对齐）
-            fill_center_x = bg_left + current_width / 2
-            fill_center_y = self.background.get_center()[1]
-            new_fill_bar.move_to([fill_center_x, fill_center_y, 0])
+            # 更新填充条
+            self._update_fill_bar(current_width, current_height, [current_x, current_y, current_z])
             
-            # 替换旧的填充条
-            self.remove(self.fill_bar)
-            self.fill_bar = new_fill_bar
-            self.add(self.fill_bar)
+            # 强制刷新颜色属性，防止动画过程中颜色变淡或被混合
+            # 必须在添加到 VGroup 之后再次设置，确保颜色正确，无白色框
+            if self.fill_bar in self.submobjects:
+                self.fill_bar.set_fill(color=self.fill_color, opacity=1.0)
+                self.fill_bar.set_stroke(width=0, opacity=0)
+                self.fill_bar.set_opacity(1.0)
         
         anims.append(
             UpdateFromAlphaFunc(
@@ -237,20 +376,32 @@ class ProgressBar(VGroup):
         
         # 更新百分比文本
         if self.show_percentage:
+            if progress >= 1.0:
+                # 进度达到100%时，先隐藏文本，然后在动画结束时移除
+                def hide_and_remove(mob, alpha):
+                    # 在动画过程中逐渐隐藏
+                    opacity = max(0.0, 1.0 - alpha)
+                    self.percentage_text.set_opacity(opacity)
+                    self.percentage_text.set_fill_opacity(opacity)
+                    self.percentage_text.set_stroke_opacity(opacity)
+                    # 动画结束时移除
+                    if alpha >= 1.0 and self.percentage_text in self.submobjects:
+                        self.remove(self.percentage_text)
+                
+                anims.append(UpdateFromAlphaFunc(self, hide_and_remove, run_time=run_time))
+            else:
+                # 确保文本存在且可见
+                if self.percentage_text not in self.submobjects:
+                    self.add(self.percentage_text)
+                current_opacity = self.percentage_text.get_opacity()
+                if current_opacity is None or current_opacity < 1.0:
+                    anims.append(self.percentage_text.animate.set_opacity(1.0).set_fill_opacity(1.0).set_stroke_opacity(1.0))
+                
+                # 更新文本内容
                 percentage = int(progress * 100)
-                new_text = Text(
-                    f"{percentage}%",
-                    font=self.percentage_font,
-                    font_size=self.percentage_font_size,
-                    color=self.percentage_color,
-                    weight=BOLD,
-                    stroke_width=0.3,
-                    stroke_color=self.percentage_color
-                )
+                new_text = self._create_percentage_text(percentage)
                 new_text.move_to(self.background.get_center())
-                anims.append(
-                    Transform(self.percentage_text, new_text)
-                )
+                anims.append(Transform(self.percentage_text, new_text))
         
         return AnimationGroup(*anims, run_time=run_time)
     
@@ -263,56 +414,32 @@ class ProgressBar(VGroup):
         progress = max(0.0, min(1.0, progress))
         self.current_progress = progress
         
-        # 使用背景的实际宽度（右边缘 - 左边缘），确保精确匹配
-        bg_left = self.background.get_left()[0]
-        bg_right = self.background.get_right()[0]
-        usable_width = bg_right - bg_left  # 背景的实际宽度
+        # 使用辅助方法计算填充条属性
+        fill_width, fill_height, fill_center_x, fill_center_y, fill_center_z = self._calculate_fill_bar_properties(progress)
         
-        min_width = 0.1
+        # 更新填充条
+        self._update_fill_bar(fill_width, fill_height, [fill_center_x, fill_center_y, fill_center_z])
         
-        if progress <= 0:
-            new_width = min_width
-        elif progress >= 1.0:
-            # 100%时铺满整个背景宽度
-            new_width = usable_width
-        else:
-            new_width = max(min_width, usable_width * progress)
-        
-        
-        # 重新创建填充条，确保填充颜色完整
-        fill_height = self.height * 0.95
-        self.remove(self.fill_bar)
-        self.fill_bar = RoundedRectangle(
-            width=new_width,
-            height=fill_height,
-            corner_radius=self.corner_radius * 0.9,
-            fill_color=self.fill_color,
-            fill_opacity=1.0,
-            stroke_opacity=0
-        )
-        # 精确左对齐：填充条左边缘对齐到背景左边缘
-        fill_center_x = bg_left + new_width / 2
-        self.fill_bar.move_to([
-            fill_center_x,
-            self.background.get_center()[1],
-            0
-        ])
-        
+        # 更新百分比文本
         if self.show_percentage:
-            percentage = int(progress * 100)
-            new_text = Text(
-                f"{percentage}%",
-                font="Arial",
-                font_size=self.percentage_font_size,
-                color=self.percentage_color,
-                weight=BOLD,
-                stroke_width=0.5,
-                stroke_color=self.percentage_color
-            )
-            new_text.move_to(self.background.get_center())
-            self.remove(self.percentage_text)
-            self.percentage_text = new_text
-            self.add(self.percentage_text)
+            if progress >= 1.0:
+                # 进度达到100%时，直接移除百分比文本
+                self.remove(self.percentage_text)
+            else:
+                # 确保文本存在且可见
+                if self.percentage_text not in self.submobjects:
+                    self.add(self.percentage_text)
+                self.percentage_text.set_opacity(1.0)
+                self.percentage_text.set_fill_opacity(1.0)
+                self.percentage_text.set_stroke_opacity(1.0)
+                
+                # 更新文本内容
+                percentage = int(progress * 100)
+                new_text = self._create_percentage_text(percentage)
+                new_text.move_to(self.background.get_center())
+                self.remove(self.percentage_text)
+                self.percentage_text = new_text
+                self.add(self.percentage_text)
     
     def auto_progress(self, duration=None, start_progress=0.0, end_progress=1.0):
         """
@@ -369,77 +496,41 @@ class ProgressBar(VGroup):
                 # 线性插值：每一帧根据当前时间计算精确进度
                 progress = self._auto_start_progress + (current_time / self._auto_duration) * self._auto_progress_range
             
-            # 更新填充条宽度（使用背景的实际宽度，确保100%时完全铺满）
-            min_width = 0.1
-            # 使用背景的实际宽度（右边缘 - 左边缘），确保精确匹配
-            bg_left = self.background.get_left()[0]
-            bg_right = self.background.get_right()[0]
-            usable_width = bg_right - bg_left  # 背景的实际宽度
-            
-            if progress <= 0:
-                new_width = min_width
-            elif progress >= 1.0:
-                # 100%时铺满整个背景宽度，确保完全填充
-                # 使用背景的完整宽度，不留任何空隙
-                new_width = usable_width
-                # 确保 progress 被设置为 1.0，避免浮点数精度问题
-                progress = 1.0
-            else:
-                new_width = max(min_width, usable_width * progress)
-            
-            # 更新填充条宽度和位置
-            # 在100%时，直接设置填充条从背景左边缘到右边缘
-            # 重新创建填充条，确保填充颜色完整
-            fill_height = self.height * 0.95
-            self.remove(self.fill_bar)
-            
+            # 确保 progress 被限制在有效范围内
             if progress >= 1.0:
-                # 100%时，确保填充条完全铺满背景
-                self.fill_bar = RoundedRectangle(
-                    width=usable_width,
-                    height=fill_height,
-                    corner_radius=self.corner_radius * 0.9,
-                    fill_color=self.fill_color,
-                    fill_opacity=1.0,
-                    stroke_opacity=0
-                )
-                # 左边缘对齐到背景左边缘
-                self.fill_bar.align_to(self.background, LEFT)
-                # 确保垂直居中
-                self.fill_bar.align_to(self.background, DOWN)
-                self.fill_bar.shift(UP * (self.background.get_center()[1] - self.fill_bar.get_center()[1]))
-            else:
-                # 非100%时，使用正常的计算方式
-                self.fill_bar = RoundedRectangle(
-                    width=new_width,
-                    height=fill_height,
-                    corner_radius=self.corner_radius * 0.9,
-                    fill_color=self.fill_color,
-                    fill_opacity=1.0,
-                    stroke_opacity=0
-                )
-                # 更新填充条位置（精确左对齐）
-                # 填充条左边缘始终对齐到背景左边缘，只改变宽度实现填充效果
-                fill_center_x = bg_left + new_width / 2
-                fill_center_y = self.background.get_center()[1]
-                self.fill_bar.move_to([fill_center_x, fill_center_y, 0])
+                progress = 1.0
             
-            self.add(self.fill_bar)
+            # 使用辅助方法计算填充条属性
+            fill_width, fill_height, fill_center_x, fill_center_y, fill_center_z = self._calculate_fill_bar_properties(progress)
+            
+            # 更新填充条
+            self._update_fill_bar(fill_width, fill_height, [fill_center_x, fill_center_y, fill_center_z])
+            
+            # 强制刷新颜色属性，防止动画过程中颜色变淡或被混合，无白色框
+            if self.fill_bar in self.submobjects:
+                self.fill_bar.set_fill(color=self.fill_color, opacity=1.0)
+                self.fill_bar.set_stroke(width=0, opacity=0)
+                self.fill_bar.set_opacity(1.0)
             
             # 更新百分比文本
             if self.show_percentage:
-                percentage = int(progress * 100)
-                new_text = Text(
-                    f"{percentage}%",
-                    font=self.percentage_font,
-                    font_size=self.percentage_font_size,
-                    color=self.percentage_color,
-                    weight=BOLD,
-                    stroke_width=0.3,
-                    stroke_color=self.percentage_color
-                )
-                new_text.move_to(self.background.get_center())
-                self.percentage_text.become(new_text)
+                if progress >= 1.0:
+                    # 进度达到100%时，直接移除百分比文本
+                    if self.percentage_text in self.submobjects:
+                        self.remove(self.percentage_text)
+                else:
+                    # 确保文本存在且可见
+                    if self.percentage_text not in self.submobjects:
+                        self.add(self.percentage_text)
+                    self.percentage_text.set_opacity(1.0)
+                    self.percentage_text.set_fill_opacity(1.0)
+                    self.percentage_text.set_stroke_opacity(1.0)
+                    
+                    # 更新文本内容
+                    percentage = int(progress * 100)
+                    new_text = self._create_percentage_text(percentage)
+                    new_text.move_to(self.background.get_center())
+                    self.percentage_text.become(new_text)
             
             # 更新当前进度
             self.current_progress = progress
@@ -461,9 +552,31 @@ class ProgressBar(VGroup):
             current_time = alpha * self._auto_duration
             self._time_tracker.set_value(current_time)
             
-            # 当动画结束时（alpha >= 1.0），清理updater
-            # 这样可以确保在进度条到达100%后自动清理，无需手动调用
+            # 当动画结束时（alpha >= 1.0），确保进度条到达最终状态后再清理updater
             if alpha >= 1.0 and not self._updater_cleared:
+                # 确保进度条已经更新到最终状态
+                final_progress = self._auto_end_progress
+                fill_width, fill_height, fill_center_x, fill_center_y, fill_center_z = self._calculate_fill_bar_properties(final_progress)
+                self._update_fill_bar(fill_width, fill_height, [fill_center_x, fill_center_y, fill_center_z])
+                self.current_progress = final_progress
+                
+                # 更新百分比文本
+                if self.show_percentage:
+                    if final_progress >= 1.0:
+                        if self.percentage_text in self.submobjects:
+                            self.remove(self.percentage_text)
+                    else:
+                        if self.percentage_text not in self.submobjects:
+                            self.add(self.percentage_text)
+                        self.percentage_text.set_opacity(1.0)
+                        self.percentage_text.set_fill_opacity(1.0)
+                        self.percentage_text.set_stroke_opacity(1.0)
+                        percentage = int(final_progress * 100)
+                        new_text = self._create_percentage_text(percentage)
+                        new_text.move_to(self.background.get_center())
+                        self.percentage_text.become(new_text)
+                
+                # 清理updater
                 self.clear_updaters()
                 self._updater_cleared = True
         
