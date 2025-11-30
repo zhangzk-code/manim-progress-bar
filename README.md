@@ -12,7 +12,7 @@ pip install manim-progress-bar
 
 ```python
 from manim import *
-from progress_bar import ProgressBar
+from manim_progress_bar.progress_bar import ProgressBar
 
 class MyScene(Scene):
     def construct(self):
@@ -31,6 +31,73 @@ class MyScene(Scene):
         # 自动推进到100%（10秒）
         self.play(progress.start())
 ```
+
+## 自定义样式
+```python
+class CustomProgressExample(Scene):
+    """自定义进度条示例"""
+    
+    def construct(self):
+        # 创建多个不同样式的进度条
+        title = Text("多种进度条样式", font_size=36, color=WHITE)
+        title.to_edge(UP, buff=0.5)
+        
+        # 进度条1：细长型，红色
+        bar1 = ProgressBar(
+            width=12,
+            height=0.15,
+            position=UP * 2,
+            fill_color=RED,
+            background_color="#444444",
+            show_percentage=False
+        )
+        
+        # 进度条2：中等高度，绿色，带百分比
+        bar2 = ProgressBar(
+            width=10,
+            height=0.3,
+            position=ORIGIN,
+            fill_color=GREEN,
+            background_color="#333333",
+            show_percentage=True,
+            percentage_font_size=20
+        )
+        
+        # 进度条3：粗壮型，蓝色，大字体
+        bar3 = ProgressBar(
+            width=8,
+            height=0.5,
+            position=DOWN * 2,
+            fill_color=BLUE,
+            background_color="#222222",
+            border_width=3,
+            corner_radius=0.2,
+            show_percentage=True,
+            percentage_font_size=28,
+            percentage_color=YELLOW
+        )
+        
+        self.play(Write(title))
+        self.play(FadeIn(bar1), FadeIn(bar2), FadeIn(bar3))
+        self.wait(0.5)
+        
+        # 同时推进所有进度条，但速度不同
+        # 注意：auto_progress() 返回的动画已经设置了正确的 run_time，不需要再指定
+        self.play(
+            bar1.auto_progress(duration=8.0),  # 自动使用 run_time=8.0
+            bar2.auto_progress(duration=6.0),  # 自动使用 run_time=6.0
+            bar3.auto_progress(duration=4.0)   # 自动使用 run_time=4.0
+        )
+        
+        self.wait(1.0)
+```
+
+## 演示视频
+
+<video width="100%" controls>
+  <source src="videos/CustomProgressExample.mp4" type="video/mp4">
+  您的浏览器不支持视频标签。
+</video>
 
 ## 主要方法
 

@@ -2,6 +2,7 @@
 @"
 # Python
 __pycache__/
+example/__pycache__/
 *.py[cod]
 *$py.class
 *.so
@@ -37,3 +38,6 @@ publish.bat
 .env
 .env.local
 "@ | Out-File -FilePath .gitignore -Encoding utf8
+
+# manim
+media/
