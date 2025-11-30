@@ -2,6 +2,10 @@
 
 A customizable progress bar component for Manim animations.
 
+**Version: 0.2.0**
+
+A powerful and flexible progress bar plugin for Manim that supports custom angles, smooth animations, and extensive customization options.
+
 ## Installation
 
 ```bash
@@ -9,6 +13,8 @@ pip install manim-progress-bar
 ```
 
 ## 快速开始
+
+### 基础使用
 
 ```python
 from manim import *
@@ -31,6 +37,55 @@ class MyScene(Scene):
         # 自动推进到100%（10秒）
         self.play(progress.start())
 ```
+
+### 角度支持
+
+进度条支持任意角度（0-360度），可以创建水平、垂直、对角线等方向的进度条：
+
+```python
+class AngleExample(Scene):
+    def construct(self):
+        # 水平进度条（0度，默认）
+        bar1 = ProgressBar(
+            width=8,
+            height=0.3,
+            position=UP * 2,
+            fill_color=BLUE,
+            angle=0
+        )
+        
+        # 垂直进度条（90度）
+        bar2 = ProgressBar(
+            width=8,
+            height=0.3,
+            position=ORIGIN,
+            fill_color=GREEN,
+            angle=90
+        )
+        
+        # 对角线进度条（45度）
+        bar3 = ProgressBar(
+            width=8,
+            height=0.3,
+            position=DOWN * 2,
+            fill_color=RED,
+            angle=45
+        )
+        
+        self.play(FadeIn(bar1), FadeIn(bar2), FadeIn(bar3))
+        self.play(
+            bar1.auto_progress(duration=3.0),
+            bar2.auto_progress(duration=3.0),
+            bar3.auto_progress(duration=3.0)
+        )
+```
+
+**角度说明：**
+- `0°`：水平向右（默认）
+- `90°`：垂直向上
+- `180°`：水平向左
+- `270°`：垂直向下
+- 其他角度：对角线方向
 
 ## 自定义样式
 ```python
@@ -144,7 +199,8 @@ progress.update_progress_instant(0.5)  # 立即到50%
 | `show_percentage` | bool | True | 是否显示百分比 |
 | `percentage_font_size` | int | 28 | 百分比字体大小 |
 | `percentage_color` | str/Color | WHITE | 百分比文字颜色 |
-| `percentage_font` | str | "Arial" | 百分比字体 |
+| `percentage_font` | str | "Sans" | 百分比字体（默认使用 Manim 常用无衬线字体） |
+| `angle` | float | 0 | 进度条角度（度），0度为水平向右，按逆时针旋转 |
 | `duration` | float | None | 总时长（秒），用于自动推进 |
 
 ## 示例
@@ -190,16 +246,59 @@ video_progress = ProgressBar(
 self.play(video_progress.start())
 ```
 
+### 不同角度的进度条
+```python
+# 水平进度条（默认）
+horizontal = ProgressBar(angle=0, fill_color=BLUE)
+
+# 垂直进度条
+vertical = ProgressBar(angle=90, fill_color=GREEN)
+
+# 对角线进度条
+diagonal = ProgressBar(angle=45, fill_color=RED)
+
+# 任意角度
+custom = ProgressBar(angle=135, fill_color=YELLOW)
+```
+
 ## 特性
 
 ✅ **完全自定义**：颜色、位置、高度、宽度都可自定义  
+✅ **任意角度**：支持 0-360 度任意角度，可创建水平、垂直、对角线等方向的进度条  
 ✅ **时间控制**：支持设置总时长，进度条自动按时间推进  
 ✅ **平滑动画**：使用 Manim 的动画系统，动画流畅  
-✅ **百分比显示**：可选择显示/隐藏百分比  
-✅ **精确填充**：根据进度值精确填充到指定位置，100% 时完全铺满
+✅ **百分比显示**：可选择显示/隐藏百分比，100% 时自动隐藏  
+✅ **精确填充**：根据进度值精确填充到指定位置，100% 时完全铺满  
+✅ **高精度计算**：对特殊角度（0°、90°、180°、270°）使用精确值，避免浮点误差  
+✅ **动态尺寸**：自动计算最小尺寸，防止圆角矩形变形
+
+## 版本更新
+
+### v0.2.0 (2025-11-30)
+
+**新功能：**
+- ✨ 支持任意角度（0-360度）的进度条
+- ✨ 动态计算最小尺寸，防止圆角矩形变形
+- ✨ 优化填充条更新机制，提升性能
+- ✨ 更改默认字体为 "Sans"，提升兼容性
+
+**修复：**
+- 🐛 修复90度角时的浮点误差问题
+- 🐛 修复百分比文本在100%时不隐藏的问题
+- 🐛 修复颜色变淡和白色框问题
+- 🐛 修复动画过程中的各种视觉问题
+
+**改进：**
+- ⚡ 代码架构优化，移除不必要的计算
+- ⚡ 方向向量计算优化，特殊角度使用精确值
+- ⚡ 改进百分比文本显示/隐藏逻辑
+
+查看完整的 [CHANGELOG.md](CHANGELOG.md) 了解详细信息。
 
 ## 注意事项
 
 - 使用 `auto_progress()` 或 `start()` 时，返回的动画已经设置了正确的 `run_time`，不需要在 `self.play()` 中再次指定
 - 当进度条到达目标进度（通常是100%）时，updater 会自动清理，无需手动调用 `clear_updaters()`
+- 进度条在 100% 时会自动隐藏百分比文本
+- 对于特殊角度（0°、90°、180°、270°），系统使用精确值计算，避免浮点误差
 
