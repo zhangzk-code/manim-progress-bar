@@ -1,11 +1,11 @@
-from setuptools import setup, find_packages
+﻿from setuptools import setup, find_packages
 
 with open("README.md", "r", encoding="utf-8") as fh:
     long_description = fh.read()
 
 setup(
     name="manim-progress-bar",
-    version="0.1.0",
+    version="0.1.1",
     author="Zhiku Zhang",
     author_email="zhangzk1205@163.com",
     description="A customizable progress bar component for Manim animations",

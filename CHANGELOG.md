@@ -32,3 +32,11 @@
 - `start()` - 使用预设时长自动推进
 - `update_progress_instant()` - 立即更新进度（无动画）
 
+## [0.1.1] - 2025-11-30
+
+### Added
+- 无
+
+### Features
+- 无
+
