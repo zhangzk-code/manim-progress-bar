@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "manim-progress-bar"
+version = "0.1.0"
+description = "A customizable progress bar component for Manim animations"
+readme = "README.md"
+requires-python = ">=3.8"
+license = "MIT"
+license-files = ["LICENSE"]
+authors = [
+    {name = "Zhiku Zhang", email = "zhangzk1205@163.com"}
+]
+keywords = ["manim", "animation", "progress-bar", "progress", "bar"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Topic :: Multimedia :: Graphics :: Animation",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+dependencies = [
+    "manim>=0.17.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/zhangzk-code/manim-progress-bar"
+Documentation = "https://github.com/zhangzk-code/manim-progress-bar#readme"
+Repository = "https://github.com/zhangzk-code/manim-progress-bar"
+Issues = "https://github.com/zhangzk-code/manim-progress-bar/issues"
